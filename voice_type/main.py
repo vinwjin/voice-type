@@ -29,7 +29,7 @@ from voice_type.config import Config
 from voice_type.recorder import AudioRecorder
 from voice_type.transcriber import Transcriber, OllamaTranscriber, TranscriptionError
 from voice_type.paster import TextPaster
-from voice_type.ui import OverlayWindow, State
+from voice_type.ui import OverlayWindow, State, TrayManager
 
 
 logging.basicConfig(
@@ -68,8 +68,15 @@ class VoiceTypeApp:
             log.info("Using faster-whisper (%s model)", cfg.model_size)
 
         self.overlay: Optional[OverlayWindow] = None
+        self.tray: Optional[TrayManager] = None
         self._hotkey_thread: Optional[threading.Thread] = None
         self._running = False
+
+    def _update_state(self, state: State, message: Optional[str] = None) -> None:
+        """Update both overlay and tray icon to reflect current state."""
+        self.overlay.set_state(state, message)
+        if self.tray:
+            self.tray.set_state(state)
 
     def _hotkey_loop(self) -> None:
         """Background thread that listens for Alt+V presses."""
@@ -106,23 +113,23 @@ class VoiceTypeApp:
     def _start_recording(self) -> None:
         """Start audio recording."""
         log.info("Recording started")
-        self.overlay.set_state(State.RECORDING)
+        self._update_state(State.RECORDING)
         try:
             self.recorder.start()
         except Exception as e:
             log.error("Failed to start recording: %s", e)
-            self.overlay.set_state(State.ERROR, str(e))
+            self._update_state(State.ERROR, str(e))
 
     def _stop_and_paste(self) -> None:
         """Stop recording, transcribe, and paste the result."""
         log.info("Recording stopped, transcribing...")
-        self.overlay.set_state(State.TRANSCRIBING)
+        self._update_state(State.TRANSCRIBING)
 
         try:
             audio = self.recorder.stop()
             if len(audio) == 0:
                 log.warning("No audio recorded")
-                self.overlay.set_state(State.READY)
+                self._update_state(State.READY)
                 return
 
             log.info("Audio duration: %.1fs", len(audio) / self.cfg.sample_rate)
@@ -135,35 +142,35 @@ class VoiceTypeApp:
 
             if not text:
                 log.warning("Transcription returned empty")
-                self.overlay.set_state(State.READY)
+                self._update_state(State.READY)
                 return
 
             log.info("Transcribed: %s", text[:80])
 
             # Paste into active window
-            self.overlay.set_state(State.DONE, "Pasting...")
+            self._update_state(State.DONE, "Pasting...")
             success = self.paster.paste_text(text)
             if success:
                 log.info("Text pasted successfully")
             else:
                 log.warning("All paste methods failed — text may not have been inserted")
-                self.overlay.set_state(State.ERROR, "Paste failed")
+                self._update_state(State.ERROR, "Paste failed")
 
             # Brief "done" state, then return to ready
             def reset_state():
                 time.sleep(2)
                 if self._running:
-                    self.overlay.set_state(State.READY)
+                    self._update_state(State.READY)
 
             threading.Thread(target=reset_state, daemon=True).start()
 
         except TranscriptionError as e:
             log.error("Transcription error: %s", e)
-            self.overlay.set_state(State.ERROR, str(e))
+            self._update_state(State.ERROR, str(e))
         except Exception as e:
             log.error("Unexpected error: %s", e)
             traceback.print_exc()
-            self.overlay.set_state(State.ERROR, str(e))
+            self._update_state(State.ERROR, str(e))
 
     def run(self) -> None:
         """Start the application (blocking)."""
@@ -175,7 +182,12 @@ class VoiceTypeApp:
 
         # Create and start overlay in main thread
         self.overlay = OverlayWindow(on_close=self.stop)
-        self.overlay.set_state(State.READY)
+        self._update_state(State.READY)
+
+        # Start system tray
+        self.tray = TrayManager(self.overlay)
+        self.tray.start()
+        log.info("System tray started")
 
         # Start hotkey listener in background thread
         self._hotkey_thread = threading.Thread(target=self._hotkey_loop, daemon=True)
