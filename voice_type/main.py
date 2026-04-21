@@ -142,8 +142,12 @@ class VoiceTypeApp:
 
             # Paste into active window
             self.overlay.set_state(State.DONE, "Pasting...")
-            self.paster.paste_text(text)
-            log.info("Text pasted successfully")
+            success = self.paster.paste_text(text)
+            if success:
+                log.info("Text pasted successfully")
+            else:
+                log.warning("All paste methods failed — text may not have been inserted")
+                self.overlay.set_state(State.ERROR, "Paste failed")
 
             # Brief "done" state, then return to ready
             def reset_state():
