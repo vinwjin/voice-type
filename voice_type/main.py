@@ -12,6 +12,7 @@ import time
 import traceback
 import logging
 from pathlib import Path
+from typing import Optional
 
 # Ensure we're running on Windows
 if sys.platform != "win32":

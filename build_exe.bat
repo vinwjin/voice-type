@@ -19,7 +19,7 @@ pip install -e .
 :: Build with PyInstaller
 echo Building executable...
 pyinstaller ^
-    --onedir ^
+    --onefile ^
     --windowed ^
     --name VoiceType ^
     --add-data "voice_type;voice_type" ^
@@ -33,5 +33,5 @@ pyinstaller ^
 
 echo.
 echo Build complete!
-echo Output: dist/VoiceType/
+echo Output: dist/VoiceType.exe
 pause
