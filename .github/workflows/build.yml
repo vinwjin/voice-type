@@ -1,0 +1,35 @@
+name: Build EXE
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install faster-whisper sounddevice keyboard pyperclip pywin32 pystray pillow
+          pip install pyinstaller
+
+      - name: Build exe
+        run: |
+          pyinstaller --onefile --windowed --name VoiceType --add-data "main.py;." main.py
+        shell: cmd
+
+      - name: Upload asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/VoiceType.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
